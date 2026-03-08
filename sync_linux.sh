@@ -70,7 +70,7 @@ fi
 TMP_FILE=$(mktemp)
 tr -d '\r' < "$EXT_FILE" | sed '/^[[:space:]]*$/d' | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$TMP_FILE"
 
-INSTALLED_EXTS=$(antigravity --list-extensions 2>/dev/null)
+INSTALLED_EXTS=$(antigravity --list-extensions 2>&1 | grep -v "createInstance")
 COUNT_INSTALLED=0
 COUNT_SKIPPED=0
 COUNT_FAILED=0
@@ -91,7 +91,7 @@ done < "$TMP_FILE"
 rm -f "$TMP_FILE"
 
 # 6. Exportar de vuelta, hacer push y actualizar .last_sync
-antigravity --list-extensions 2>/dev/null | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$EXT_FILE"
+antigravity --list-extensions 2>&1 | grep -v "createInstance" | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$EXT_FILE"
 TOTAL_EXTS=$(wc -l < "$EXT_FILE")
 
 date +%s > "$HOME/.last_sync"

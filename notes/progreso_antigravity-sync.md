@@ -5,3 +5,9 @@
 - Añadido el README explicativo con las instrucciones de uso y resolución de problemas
 - Incluida gestión avanzada de variables de entorno, logs rotativos y gestión de conflictos
 - Estado actual del proyecto: Listo para probar en los entornos locales de Windows y Linux
+
+## [2026-03-08] — Corrección del comando list-extensions
+
+- Se actualizó el comando `antigravity --list-extensions` para incluir `2>&1 | grep -v "createInstance"` en lugar de silenciar por completo la salida de error
+- Se hizo para solucionar el problema donde no se exportaban todas las extensiones correctamente debido a los warnings del entorno
+- Estado actual del proyecto: Sincronización en Linux pulida y lista para usar
