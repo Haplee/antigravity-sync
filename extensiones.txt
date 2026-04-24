@@ -1,6 +1,7 @@
 0xtanzim.filetree-pro
 carloshenrique.dark-material-dracula
 devsense.composer-php-vscode
+devsense.intelli-php-vscode
 devsense.phptools-vscode
 devsense.profiler-php-vscode
 dracula-2.dracula-2
