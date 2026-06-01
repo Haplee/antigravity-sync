@@ -57,38 +57,40 @@ if ! git pull; then
     git commit -m "Merge: resolución de conflicto a favor de repositorio remoto"
 fi
 
-# 4. Verificar file exportado
+# 4. Comprobar el fichero de extensiones
 EXT_FILE="extensiones.txt"
-if [ ! -s "$EXT_FILE" ]; then
-    msg="Error: extensiones.txt está vacío o no existe. Abortando."
-    echo -e "\e[31m$msg\e[0m"
-    write_log "$msg"
-    exit 1
-fi
-
-# 5. Limpiar el archivo e instalar
-TMP_FILE=$(mktemp)
-tr -d '\r' < "$EXT_FILE" | sed '/^[[:space:]]*$/d' | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$TMP_FILE"
-
-INSTALLED_EXTS=$(antigravity --list-extensions 2>&1 | grep -v "createInstance")
 COUNT_INSTALLED=0
 COUNT_SKIPPED=0
 COUNT_FAILED=0
 
-while read -r ext; do
-    if echo "$INSTALLED_EXTS" | grep -i -q "^${ext}$"; then
-        ((COUNT_SKIPPED++))
-    else
-        echo -e "\e[36mInstalando extensión: $ext\e[0m"
-        if antigravity --install-extension "$ext" &> /dev/null; then
-            ((COUNT_INSTALLED++))
+if [ ! -s "$EXT_FILE" ]; then
+    # Primer arranque (o repo vacío): no hay nada que instalar todavía.
+    # No abortamos: continuamos para exportar las extensiones locales y subirlas.
+    msg="extensiones.txt vacío (primer arranque). Se exportarán las extensiones locales."
+    echo -e "\e[33m$msg\e[0m"
+    write_log "$msg"
+else
+    # 5. Limpiar el archivo e instalar lo que falte
+    TMP_FILE=$(mktemp)
+    tr -d '\r' < "$EXT_FILE" | sed '/^[[:space:]]*$/d' | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$TMP_FILE"
+
+    INSTALLED_EXTS=$(antigravity --list-extensions 2>&1 | grep -v "createInstance")
+
+    while read -r ext; do
+        if echo "$INSTALLED_EXTS" | grep -i -q "^${ext}$"; then
+            ((COUNT_SKIPPED++))
         else
-            ((COUNT_FAILED++))
-            write_log "Error al instalar la extensión: $ext"
+            echo -e "\e[36mInstalando extensión: $ext\e[0m"
+            if antigravity --install-extension "$ext" &> /dev/null; then
+                ((COUNT_INSTALLED++))
+            else
+                ((COUNT_FAILED++))
+                write_log "Error al instalar la extensión: $ext"
+            fi
         fi
-    fi
-done < "$TMP_FILE"
-rm -f "$TMP_FILE"
+    done < "$TMP_FILE"
+    rm -f "$TMP_FILE"
+fi
 
 # 6. Exportar de vuelta, hacer push y actualizar .last_sync
 antigravity --list-extensions 2>&1 | grep -v "createInstance" | grep -E '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' > "$EXT_FILE"
