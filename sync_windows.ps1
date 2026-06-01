@@ -58,48 +58,64 @@ if ($LASTEXITCODE -ne 0 -and $pullOutput -match "conflict") {
     git commit -m "Merge: resolución de conflicto a favor de repositorio remoto"
 }
 
-# 4. Exportar extensiones (filtrando el warning known)
+# 4. Comprobar el fichero del repo e instalar lo que falte (sincronización bidireccional)
 $extFile = "extensiones.txt"
-antigravity --list-extensions 2>&1 | Select-String -NotMatch "createInstance" | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" } | Out-File $extFile -Encoding UTF8
+$countInstalled = 0
+$countSkipped = 0
+$countFailed = 0
 
-# 5. Verificar que no esté vacío
-$extCount = 0
+$repoExtCount = 0
 if (Test-Path $extFile) {
-    # Evitar conteo de líneas vacías adicionales
-    $extCount = @(Get-Content $extFile | Where-Object { $_.Trim() -ne "" }).Count
+    $repoExtCount = @(Get-Content $extFile | Where-Object { $_.Trim() -ne "" }).Count
 }
 
-if ($extCount -eq 0) {
-    $msg = "Error: El archivo exportado está vacío. Abortando sincronización."
-    Write-Host $msg -ForegroundColor Red
-    Write-Log $msg
-    exit 1
-}
-
-# 6. Comprobar si hay cambios en git
-$status = git status --porcelain
-if (-not $status) {
-    $msg = "Sin cambios, sincronización omitida."
+if ($repoExtCount -eq 0) {
+    # Primer arranque (o repo vacío): no hay nada que instalar todavía.
+    # No abortamos: continuamos para exportar las extensiones locales y subirlas.
+    $msg = "extensiones.txt vacío (primer arranque). Se exportarán las extensiones locales."
     Write-Host $msg -ForegroundColor Yellow
     Write-Log $msg
-    exit 0
+} else {
+    $installedExts = antigravity --list-extensions 2>&1 | Select-String -NotMatch "createInstance" | ForEach-Object { $_.ToString().Trim() }
+    Get-Content $extFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' } | ForEach-Object {
+        $ext = $_
+        if ($installedExts -contains $ext) {
+            $countSkipped++
+        } else {
+            Write-Host "Instalando extensión: $ext" -ForegroundColor Cyan
+            antigravity --install-extension $ext 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $countInstalled++ } else { $countFailed++; Write-Log "Error al instalar la extensión: $ext" }
+        }
+    }
 }
 
-# 7. Add, commit y push
-$dateStr = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-git add $extFile
-git commit -m "Sincronización Windows: $dateStr ($extCount extensiones)" | Out-Null
-$pushOutput = git push 2>&1
+# 5. Exportar de vuelta las extensiones locales (filtrando el warning known)
+antigravity --list-extensions 2>&1 | Select-String -NotMatch "createInstance" | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$' } | Out-File $extFile -Encoding UTF8
+$extCount = @(Get-Content $extFile | Where-Object { $_.Trim() -ne "" }).Count
 
-if ($LASTEXITCODE -ne 0) {
-    $msg = "Error en git push. Comprueba tus credenciales de GitHub (Personal Access Token)."
-    Write-Host $msg -ForegroundColor Red
-    Write-Log "Error de credenciales en push: $pushOutput"
-    exit 1
+# 6. Comprobar si hay cambios en git
+$status = git status --porcelain $extFile
+if (-not $status) {
+    $msg = "Sin cambios a hacer push."
+    Write-Host $msg -ForegroundColor Yellow
+    Write-Log $msg
+} else {
+    # 7. Add, commit y push
+    $dateStr = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    git add $extFile
+    git commit -m "Sincronización Windows: $dateStr ($extCount extensiones)" | Out-Null
+    $pushOutput = git push 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        $msg = "Error en git push. Comprueba tus credenciales de GitHub (Personal Access Token)."
+        Write-Host $msg -ForegroundColor Red
+        Write-Log "Error de credenciales en push: $pushOutput"
+        exit 1
+    }
 }
 
 # 8. Log resumen
-$msg = "Sincronización finalizada con éxito. Exportadas $extCount extensiones."
+$msg = "Sincronización completada. Instaladas: $countInstalled, Omitidas: $countSkipped, Fallidas: $countFailed"
 Write-Log $msg
 Write-Host $msg -ForegroundColor Green
-Write-Host "Hora: $dateStr" -ForegroundColor Cyan
+Write-Host "Total extensiones actuales: $extCount" -ForegroundColor Cyan
